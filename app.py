@@ -63,7 +63,7 @@ with col_input:
                 with st.spinner("AI đang tổng hợp dữ liệu thị trường..."):
                     try:
                         genai.configure(api_key=api_key)
-                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        model = genai.GenerativeModel('gemini-pro')
                         
                         prompt = f"""
                         Bạn là một Giám đốc Nghiên cứu Thị trường Bất động sản tại Việt Nam.
@@ -382,3 +382,4 @@ with col_result:
                                   .background_gradient(cmap='RdYlGn', axis=None),
                 use_container_width=True
             )
+
