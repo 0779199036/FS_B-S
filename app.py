@@ -62,20 +62,34 @@ with col_input:
             else:
                 with st.spinner("AI đang tổng hợp dữ liệu thị trường..."):
                     try:
-                        genai.configure(api_key=api_key)
-                        model = genai.GenerativeModel('gemini-pro')
+genai.configure(api_key=api_key)
                         
-                        prompt = f"""
-                        Bạn là một Giám đốc Nghiên cứu Thị trường Bất động sản tại Việt Nam.
-                        Hãy phân tích ngắn gọn thị trường {proj_type} tại khu vực {location}.
-                        Yêu cầu trả lời:
-                        1. Phân tích ưu/nhược điểm vị trí này.
-                        2. Kể tên 2-3 dự án đối thủ cạnh tranh lân cận và mức giá của họ (Triệu VND/m2).
-                        3. Đề xuất mức giá bán dự kiến (Min - Max) cho dự án mới tại đây (Triệu VND/m2).
-                        """
-                        response = model.generate_content(prompt)
-                        st.success("Khảo sát hoàn tất!")
-                        st.markdown(response.text)
+                        # Tự động quét các model mà API Key của bạn được cấp quyền
+                        valid_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                        
+                        if not valid_models:
+                            st.error("API Key của bạn chưa được cấp quyền dùng AI tạo văn bản. Hãy thử tạo Key mới nhé!")
+                        else:
+                            # Tự động chọn model phù hợp nhất (ưu tiên dòng flash hoặc pro)
+                            best_model = valid_models[0]
+                            for m_name in valid_models:
+                                if 'flash' in m_name or 'pro' in m_name:
+                                    best_model = m_name
+                                    break
+                            
+                            model = genai.GenerativeModel(best_model)
+                            
+                            prompt = f"""
+                            Bạn là một Giám đốc Nghiên cứu Thị trường Bất động sản tại Việt Nam.
+                            Hãy phân tích ngắn gọn thị trường {proj_type} tại khu vực {location}.
+                            Yêu cầu trả lời:
+                            1. Phân tích ưu/nhược điểm vị trí này.
+                            2. Kể tên 2-3 dự án đối thủ cạnh tranh lân cận và mức giá của họ (Triệu VND/m2).
+                            3. Đề xuất mức giá bán dự kiến (Min - Max) cho dự án mới tại đây (Triệu VND/m2).
+                            """
+                            response = model.generate_content(prompt)
+                            st.success(f"Khảo sát hoàn tất! (Sử dụng AI: {best_model})")
+                            st.markdown(response.text)
                     except Exception as e:
                         st.error(f"Có lỗi xảy ra: Xin kiểm tra lại API Key. (Chi tiết: {e})")
     
@@ -382,4 +396,5 @@ with col_result:
                                   .background_gradient(cmap='RdYlGn', axis=None),
                 use_container_width=True
             )
+
 
