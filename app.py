@@ -44,7 +44,49 @@ st.title("📊 Hệ Thống Phân Tích FS & Dòng Tiền Dự Án (8 Năm)")
 # --- KHU VỰC NHẬP LIỆU (BÊN TRÁI) ---
 col_input, col_result = st.columns([1.2, 2.6])
 
+# --- THÊM DÒNG IMPORT NÀY LÊN ĐẦU FILE CÙNG VỚI PANDAS ---
+import google.generativeai as genai
+
+# --- TÌM ĐẾN KHU VỰC NHẬP LIỆU BÊN TRÁI VÀ THÊM VÀO ---
 with col_input:
+    st.header("📝 Nhập Thông Số")
+    
+    # BỔ SUNG KHU VỰC AI TRỢ LÝ
+    with st.expander("🤖 AI Trợ Lý Khảo Sát Giá", expanded=False):
+        st.markdown("*Nhập vị trí dự án để AI khảo sát và đề xuất mức giá bán hợp lý.*")
+        api_key = st.text_input("Nhập Google Gemini API Key:", type="password", key="ai_key")
+        location = st.text_input("Vị trí dự án (VD: Phường An Lạc, Bình Tân)", value="Phường An Lạc, Bình Tân")
+        proj_type = st.selectbox("Loại hình SP", ["Căn hộ trung cấp", "Căn hộ cao cấp", "Nhà phố liền kề", "Biệt thự"])
+        
+        if st.button("🔍 Yêu cầu AI Khảo sát", type="primary"):
+            if api_key == "":
+                st.warning("Vui lòng nhập API Key trước!")
+            else:
+                with st.spinner("AI đang tổng hợp dữ liệu thị trường..."):
+                    try:
+                        genai.configure(api_key=api_key)
+                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        
+                        prompt = f"""
+                        Bạn là một Giám đốc Nghiên cứu Thị trường Bất động sản tại Việt Nam.
+                        Hãy phân tích ngắn gọn thị trường {proj_type} tại khu vực {location}.
+                        Yêu cầu trả lời:
+                        1. Phân tích ưu/nhược điểm vị trí này.
+                        2. Kể tên 2-3 dự án đối thủ cạnh tranh lân cận và mức giá của họ (VND/m2).
+                        3. Đề xuất mức giá bán dự kiến (Min - Max) cho dự án mới tại đây (đơn vị: Triệu VND/m2).
+                        """
+                        
+                        response = model.generate_content(prompt)
+                        st.success("Khảo sát hoàn tất!")
+                        st.markdown(response.text)
+                    except Exception as e:
+                        st.error(f"Có lỗi xảy ra: {e}")
+
+    # (Đoạn code "1. Quy hoạch & Giá bán" cũ của bạn giữ nguyên ở ngay dưới đây...)
+    with st.expander("1. Quy hoạch & Giá bán", expanded=False):
+        gfa = st.number_input("Tổng GFA (m2)", value=81976, step=1000, key="inp_gfa")
+        # ...
+    with col_input:
     st.header("📝 Nhập Thông Số")
     
     with st.expander("1. Quy hoạch & Giá bán", expanded=False):
@@ -367,4 +409,5 @@ with col_result:
                 df_sens_npat.style.format("{:,.0f}")
                                   .background_gradient(cmap='RdYlGn', axis=None),
                 use_container_width=True
+
             )
