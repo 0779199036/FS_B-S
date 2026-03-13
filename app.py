@@ -3,11 +3,12 @@ import pandas as pd
 import plotly.graph_objects as go
 import numpy_financial as npf
 import io
+import google.generativeai as genai
 
 # --- CẤU HÌNH TRANG ---
 st.set_page_config(page_title="Phân tích FS & Dòng Tiền", page_icon="🏢", layout="wide")
 
-# --- HÀM FORMAT ---
+# --- HÀM FORMAT CHUẨN KẾ TOÁN ---
 def format_acc(val):
     if pd.isna(val) or val == "": return ""
     if isinstance(val, str): return val
@@ -21,6 +22,7 @@ def format_unit(val):
     s = f"{abs(val):,.1f}".replace(",", ".")
     return f"({s})" if val < 0 else s
 
+# --- HÀM TÔ MÀU BẢNG (PANDAS STYLING) ---
 def style_pl(row):
     styles = [''] * len(row)
     idx = str(row.iloc[0]).upper()
@@ -44,21 +46,17 @@ st.title("📊 Hệ Thống Phân Tích FS & Dòng Tiền Dự Án (8 Năm)")
 # --- KHU VỰC NHẬP LIỆU (BÊN TRÁI) ---
 col_input, col_result = st.columns([1.2, 2.6])
 
-# --- THÊM DÒNG IMPORT NÀY LÊN ĐẦU FILE CÙNG VỚI PANDAS ---
-import google.generativeai as genai
-
-# --- TÌM ĐẾN KHU VỰC NHẬP LIỆU BÊN TRÁI VÀ THÊM VÀO ---
 with col_input:
     st.header("📝 Nhập Thông Số")
     
-    # BỔ SUNG KHU VỰC AI TRỢ LÝ
-    with st.expander("🤖 AI Trợ Lý Khảo Sát Giá", expanded=False):
-        st.markdown("*Nhập vị trí dự án để AI khảo sát và đề xuất mức giá bán hợp lý.*")
+    # --- KHU VỰC AI TRỢ LÝ ---
+    with st.expander("🤖 AI Trợ Lý Khảo Sát Giá (Gemini)", expanded=False):
+        st.markdown("*Nhập vị trí để AI đề xuất mức giá bán hợp lý dựa trên dữ liệu thị trường.*")
         api_key = st.text_input("Nhập Google Gemini API Key:", type="password", key="ai_key")
-        location = st.text_input("Vị trí dự án (VD: Phường An Lạc, Bình Tân)", value="Phường An Lạc, Bình Tân")
-        proj_type = st.selectbox("Loại hình SP", ["Căn hộ trung cấp", "Căn hộ cao cấp", "Nhà phố liền kề", "Biệt thự"])
+        location = st.text_input("Vị trí dự án:", value="Phường An Lạc, Bình Tân", key="ai_loc")
+        proj_type = st.selectbox("Loại hình SP:", ["Căn hộ trung cấp", "Căn hộ cao cấp", "Nhà phố liền kề", "Biệt thự"], key="ai_type")
         
-        if st.button("🔍 Yêu cầu AI Khảo sát", type="primary"):
+        if st.button("🔍 Yêu cầu AI Khảo sát", type="primary", key="btn_ai"):
             if api_key == "":
                 st.warning("Vui lòng nhập API Key trước!")
             else:
@@ -72,22 +70,14 @@ with col_input:
                         Hãy phân tích ngắn gọn thị trường {proj_type} tại khu vực {location}.
                         Yêu cầu trả lời:
                         1. Phân tích ưu/nhược điểm vị trí này.
-                        2. Kể tên 2-3 dự án đối thủ cạnh tranh lân cận và mức giá của họ (VND/m2).
-                        3. Đề xuất mức giá bán dự kiến (Min - Max) cho dự án mới tại đây (đơn vị: Triệu VND/m2).
+                        2. Kể tên 2-3 dự án đối thủ cạnh tranh lân cận và mức giá của họ (Triệu VND/m2).
+                        3. Đề xuất mức giá bán dự kiến (Min - Max) cho dự án mới tại đây (Triệu VND/m2).
                         """
-                        
                         response = model.generate_content(prompt)
                         st.success("Khảo sát hoàn tất!")
                         st.markdown(response.text)
                     except Exception as e:
-                        st.error(f"Có lỗi xảy ra: {e}")
-
-    # (Đoạn code "1. Quy hoạch & Giá bán" cũ của bạn giữ nguyên ở ngay dưới đây...)
-    with st.expander("1. Quy hoạch & Giá bán", expanded=False):
-        gfa = st.number_input("Tổng GFA (m2)", value=81976, step=1000, key="inp_gfa")
-        # ...
-    with col_input:
-    st.header("📝 Nhập Thông Số")
+                        st.error(f"Có lỗi xảy ra: Xin kiểm tra lại API Key. (Chi tiết: {e})")
     
     with st.expander("1. Quy hoạch & Giá bán", expanded=False):
         gfa = st.number_input("Tổng GFA (m2)", value=81976, step=1000, key="inp_gfa")
@@ -159,7 +149,7 @@ if is_valid_schedule:
     sales_mkt_ratios = edited_schedule.iloc[4, 1:].values / 100
     op_ratios = edited_schedule.iloc[5, 1:].values / 100
 
-    # Tìm năm quyết toán thuế
+    # Tìm năm quyết toán thuế tự động
     cumulative_rev = 0
     settlement_year = 7
     for i in range(8):
@@ -168,14 +158,12 @@ if is_valid_schedule:
             settlement_year = i
             break
 
-    # --- HÀM MÔ PHỎNG TÀI CHÍNH (ĐỂ CHẠY SENSITIVITY) ---
+    # --- HÀM MÔ PHỎNG TÀI CHÍNH ---
     def run_financial_model(price_multiplier=1.0, build_cost_multiplier=1.0):
-        # 1. Doanh thu
         m_ct_rev = ct_nfa * (ct_price * price_multiplier)
         m_tt_rev = tt_nfa * (tt_price * price_multiplier)
         m_tot_rev = m_ct_rev + m_tt_rev
 
-        # 2. Chi phí
         m_build_cost = build_cost * build_cost_multiplier
         m_sales_cost = m_tot_rev * 0.04
         m_mkt_cost = m_tot_rev * 0.03
@@ -183,7 +171,6 @@ if is_valid_schedule:
         m_soft_cost = m_build_cost * 0.05
         m_dev_cost = land_cost + legal_cost + infra_cost + m_build_cost + m_soft_cost + m_sales_cost + m_mkt_cost + m_op_cost
 
-        # 3. Phân bổ
         m_cash_in = m_tot_rev * rev_ratios
         m_cash_out_land = (land_cost + legal_cost) * land_ratios
         m_cash_out_build = (m_build_cost + infra_cost + m_soft_cost) * build_ratios
@@ -191,7 +178,6 @@ if is_valid_schedule:
         m_cash_out_op = m_op_cost * op_ratios
         m_cash_out_ops_total = m_cash_out_land + m_cash_out_build + m_cash_out_sales_mkt + m_cash_out_op
 
-        # 4. Thuật toán Vay động (Waterfall)
         m_ma_draws, m_ma_repays, m_ma_ints = [], [], []
         m_dev_draws, m_dev_repays, m_dev_ints = [], [], []
         m_ma_bal, m_dev_bal, m_dev_drawn_tot = 0, 0, 0
@@ -229,14 +215,12 @@ if is_valid_schedule:
         m_total_dev_int = sum(m_dev_ints)
         m_total_int = m_total_ma_int + m_total_dev_int
         
-        # 5. Lợi nhuận & Thuế
         m_profit_gross = m_tot_rev - m_dev_cost
         m_taxable = m_profit_gross - m_total_dev_int 
         m_tax_total = m_taxable * 0.20 if m_taxable > 0 else 0
         m_pbt_display = m_profit_gross - m_total_int
         m_net_profit = m_pbt_display - m_tax_total
 
-        # 6. Dòng Thuế
         m_cash_tax = [0] * 8
         m_prepaid = 0
         for i in range(8):
@@ -249,7 +233,6 @@ if is_valid_schedule:
             else:
                 m_cash_tax[i] = 0
 
-        # 7. IRR
         m_fcff = m_cash_in - m_cash_out_ops_total - m_cash_tax 
         m_fcfe = []
         for i in range(8):
@@ -276,7 +259,6 @@ if is_valid_schedule:
             "project_irr": m_project_irr, "equity_irr": m_equity_irr
         }
 
-    # Chạy kịch bản Gốc (Base Case)
     base = run_financial_model(1.0, 1.0)
     irr_p_disp = f"{base['project_irr'] * 100:.1f}%" if base['project_irr'] else "N/A"
     irr_e_disp = f"{base['equity_irr'] * 100:.1f}%" if base['equity_irr'] else "N/A"
@@ -288,7 +270,6 @@ with col_result:
     else:
         tab1, tab2, tab3 = st.tabs(["📊 P&L Chi Tiết", "🗓️ Dòng Tiền & Vay Vốn", "📉 Phân Tích Độ Nhạy"])
         
-        # ================= TAB 1: BẢNG P&L =================
         with tab1:
             st.subheader("Dự Phóng Kết Quả Kinh Doanh (P&L)")
             
@@ -320,7 +301,6 @@ with col_result:
             for c in ["Toàn DA (/m2 GFA)", "Toàn DA (/m2 NFA)", "Cao tầng (/m2 NFA)", "Thấp tầng (/m2 NFA)"]: df_pl[c] = df_pl[c].apply(format_unit)
             st.dataframe(df_pl.style.apply(style_pl, axis=1), use_container_width=True, hide_index=True)
 
-        # ================= TAB 2: BẢNG DÒNG TIỀN =================
         with tab2:
             st.subheader("Bảng Lưu chuyển Tiền tệ & Lịch trả nợ (8 Năm)")
             c1, c2 = st.columns(2)
@@ -366,12 +346,10 @@ with col_result:
             fig.update_layout(title="Biểu Đồ Lũy Kế Dòng Tiền Vốn Chủ (Sau Vay)", barmode='group')
             st.plotly_chart(fig, use_container_width=True)
 
-        # ================= TAB 3: PHÂN TÍCH ĐỘ NHẠY =================
         with tab3:
             st.subheader("Bảng Ma trận Phân tích Độ nhạy (Sensitivity Analysis)")
             st.markdown("Đánh giá sự biến thiên của **Project IRR** và **Lợi nhuận ròng** khi **Giá bán** và **Chi phí Xây dựng** thay đổi.")
             
-            # Cấu hình biến thiên: -10%, -5%, 0% (Base), +5%, +10%
             variations = [0.9, 0.95, 1.0, 1.05, 1.1]
             col_labels = [f"Giá bán {'+' if v>1 else ''}{int((v-1)*100)}%" if v!=1 else "Giá bán (Gốc)" for v in variations]
             row_labels = [f"Chi phí XD {'+' if v>1 else ''}{int((v-1)*100)}%" if v!=1 else "Chi phí XD (Gốc)" for v in variations]
@@ -379,7 +357,6 @@ with col_result:
             irr_matrix = []
             npat_matrix = []
             
-            # Chạy giả lập 25 lần
             for cost_adj in variations:
                 irr_row = []
                 npat_row = []
@@ -390,24 +367,18 @@ with col_result:
                 irr_matrix.append(irr_row)
                 npat_matrix.append(npat_row)
                 
-            # Render Bảng IRR (Tô màu Gradient)
             st.markdown("#### Kịch bản 1: Tác động lên tỷ suất sinh lời Project IRR")
             df_sens_irr = pd.DataFrame(irr_matrix, index=row_labels, columns=col_labels)
-            
-            # Dùng Pandas Styling để tạo Heatmap (Xanh = Tốt, Đỏ = Xấu)
             st.dataframe(
                 df_sens_irr.style.format("{:.1%}", na_rep="N/A")
                                  .background_gradient(cmap='RdYlGn', axis=None),
                 use_container_width=True
             )
             
-            # Render Bảng Lợi Nhuận
             st.markdown("#### Kịch bản 2: Tác động lên Lợi nhuận sau thuế - NPAT (Triệu VND)")
             df_sens_npat = pd.DataFrame(npat_matrix, index=row_labels, columns=col_labels)
-            
             st.dataframe(
                 df_sens_npat.style.format("{:,.0f}")
                                   .background_gradient(cmap='RdYlGn', axis=None),
                 use_container_width=True
-
             )
