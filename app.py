@@ -8,7 +8,7 @@ import google.generativeai as genai
 # --- CẤU HÌNH TRANG ---
 st.set_page_config(page_title="Phân tích FS & Dòng Tiền", page_icon="🏢", layout="wide")
 
-# --- HÀM FORMAT CHUẨN KẾ TOÁN ---
+# --- HÀM FORMAT ---
 def format_acc(val):
     if pd.isna(val) or val == "": return ""
     if isinstance(val, str): return val
@@ -22,7 +22,6 @@ def format_unit(val):
     s = f"{abs(val):,.1f}".replace(",", ".")
     return f"({s})" if val < 0 else s
 
-# --- HÀM TÔ MÀU BẢNG (PANDAS STYLING) ---
 def style_pl(row):
     styles = [''] * len(row)
     idx = str(row.iloc[0]).upper()
@@ -50,7 +49,7 @@ with col_input:
     st.header("📝 Nhập Thông Số")
     
     # --- KHU VỰC AI TRỢ LÝ ---
-    with st.expander("🤖 AI Trợ Lý Khảo Sát Giá (Gemini)", expanded=False):
+    with st.expander("🤖 AI Trợ Lý Khảo Sát Giá", expanded=False):
         st.markdown("*Nhập vị trí để AI đề xuất mức giá bán hợp lý dựa trên dữ liệu thị trường.*")
         api_key = st.text_input("Nhập Google Gemini API Key:", type="password", key="ai_key")
         location = st.text_input("Vị trí dự án:", value="Phường An Lạc, Bình Tân", key="ai_loc")
@@ -62,15 +61,15 @@ with col_input:
             else:
                 with st.spinner("AI đang tổng hợp dữ liệu thị trường..."):
                     try:
-genai.configure(api_key=api_key)
+                        genai.configure(api_key=api_key)
                         
-                        # Tự động quét các model mà API Key của bạn được cấp quyền
-                        valid_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                        # Tự động quét và chọn Model hợp lệ
+                        available_models = genai.list_models()
+                        valid_models = [m.name for m in available_models if 'generateContent' in m.supported_generation_methods]
                         
                         if not valid_models:
-                            st.error("API Key của bạn chưa được cấp quyền dùng AI tạo văn bản. Hãy thử tạo Key mới nhé!")
+                            st.error("API Key của bạn chưa được cấp quyền dùng AI. Hãy thử tạo Key mới nhé!")
                         else:
-                            # Tự động chọn model phù hợp nhất (ưu tiên dòng flash hoặc pro)
                             best_model = valid_models[0]
                             for m_name in valid_models:
                                 if 'flash' in m_name or 'pro' in m_name:
@@ -78,7 +77,6 @@ genai.configure(api_key=api_key)
                                     break
                             
                             model = genai.GenerativeModel(best_model)
-                            
                             prompt = f"""
                             Bạn là một Giám đốc Nghiên cứu Thị trường Bất động sản tại Việt Nam.
                             Hãy phân tích ngắn gọn thị trường {proj_type} tại khu vực {location}.
@@ -88,7 +86,7 @@ genai.configure(api_key=api_key)
                             3. Đề xuất mức giá bán dự kiến (Min - Max) cho dự án mới tại đây (Triệu VND/m2).
                             """
                             response = model.generate_content(prompt)
-                            st.success(f"Khảo sát hoàn tất! (Sử dụng AI: {best_model})")
+                            st.success(f"Khảo sát hoàn tất! (Đang dùng AI: {best_model})")
                             st.markdown(response.text)
                     except Exception as e:
                         st.error(f"Có lỗi xảy ra: Xin kiểm tra lại API Key. (Chi tiết: {e})")
@@ -163,7 +161,6 @@ if is_valid_schedule:
     sales_mkt_ratios = edited_schedule.iloc[4, 1:].values / 100
     op_ratios = edited_schedule.iloc[5, 1:].values / 100
 
-    # Tìm năm quyết toán thuế tự động
     cumulative_rev = 0
     settlement_year = 7
     for i in range(8):
@@ -396,5 +393,3 @@ with col_result:
                                   .background_gradient(cmap='RdYlGn', axis=None),
                 use_container_width=True
             )
-
-
