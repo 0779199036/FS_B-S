@@ -3,3 +3,4 @@ pandas
 plotly
 numpy-financial
 openpyxl
+matplotlib
